@@ -1,6 +1,6 @@
 # GaggiStop
 
-GaggiStop is a proposed WiFi espresso scale integration for GaggiMate brew-by-weight auto-stop.
+GaggiStop is a deterministic WiFi espresso scale telemetry node for GaggiMate brew-by-weight auto-stop.
 
 ## Core Objective
 
@@ -49,7 +49,7 @@ GaggiGo may later visualise telemetry and scale status, but must not own live ma
 
 This branch exists to keep GaggiStop aligned with the GaggiMate/GaggiGo upstream structure.
 
-The standalone `TyrLabsOS/GaggiStop` repo can remain a proving ground for ESP32 firmware experiments, but upstream-ready project state belongs here.
+The standalone `TyrLabsOS/GaggiStop` repo acted as the initial proving ground for ESP32 firmware and hardware experimentation, but upstream-ready project state now lives inside the GaggiGo structure.
 
 This avoids:
 
@@ -84,12 +84,15 @@ It is a new telemetry source injected into the existing volumetric system.
 
 ## Current Hardware
 
-Purchased:
+Validated hardware:
 
 - ESP32 DevKit V1
 - HX711
 - 2kg load cell
 - acrylic load cell platform kit
+
+Development hardware:
+
 - jumper wires
 - breadboard
 - soldering kit
@@ -97,7 +100,9 @@ Purchased:
 
 Approximate total cost:
 
+```text
 ~£29
+```
 
 ---
 
@@ -106,15 +111,71 @@ Approximate total cost:
 Current status:
 
 ```text
-WAITING FOR HARDWARE DELIVERY
+PHASE 1 RAW TELEMETRY VALIDATED
 ```
+
+Current confirmed working chain:
+
+```text
+Load cell
+↓
+HX711
+↓
+ESP32
+↓
+serial telemetry
+```
+
+Confirmed:
+
+- ESP32 flashing works
+- PlatformIO environment works
+- serial monitor works
+- HX711 detected successfully
+- load cell produces live changing readings
+- pressure changes produce stable telemetry deltas
+- mechanical mounting is viable
+- espresso-scale sensitivity appears achievable
+
+Current known reality:
+
+```text
+mechanical assembly quality matters more than electronics complexity
+```
+
+The largest improvements in telemetry stability came from:
+
+- correcting plate preload
+- reducing mechanical binding
+- improving load-cell flex behaviour
+- stabilising the mounting geometry
+
+---
+
+## Current Immediate Priorities
 
 Current focus:
 
-- keep architecture simple
-- avoid speculative filtering logic
-- validate physical telemetry first
-- keep implementation upstream-friendly
+- improve temporary wire reliability
+- stabilise prototype mounting
+- add tare support
+- add averaging/filtering
+- convert raw HX711 counts into grams
+- validate repeatability using known weights
+
+Do NOT yet:
+
+- add WiFi telemetry
+- integrate GaggiMate control logic
+- optimise enclosure aesthetics
+- implement brew auto-stop
+- chase perfect metrology
+
+Current objective remains:
+
+```text
+stable deterministic weight telemetry
+```
 
 ---
 
