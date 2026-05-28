@@ -150,6 +150,12 @@ The largest improvements in telemetry stability came from:
 - improving load-cell flex behaviour
 - stabilising the mounting geometry
 
+Detailed validated wiring and hardware findings now live in:
+
+```text
+docs/gaggistop/HARDWARE_VALIDATION.md
+```
+
 ---
 
 ## Current Immediate Priorities
