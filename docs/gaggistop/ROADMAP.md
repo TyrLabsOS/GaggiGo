@@ -5,7 +5,7 @@
 Project status:
 
 ```text
-WAITING FOR HARDWARE DELIVERY
+PHASE 1 RAW TELEMETRY PROOF ACHIEVED
 ```
 
 Current completed work:
@@ -18,13 +18,30 @@ Current completed work:
 - scope discipline established
 - PlatformIO environment prepared
 - upstream integration strategy established
+- ESP32 powered successfully
+- ESP32 detected on COM3
+- firmware built successfully
+- firmware uploaded successfully
+- serial monitor confirmed working
+- HX711 headers soldered
+- HX711 connected to ESP32
+- load cell connected to HX711
+- raw HX711 data confirmed scrolling in serial monitor
+- load cell pressure confirmed to change readings
 
 Current focus:
 
-- avoid speculative complexity
-- wait for physical telemetry
+- clean up temporary hardware wiring
+- improve connection reliability
+- keep setup low-voltage and USB-powered
 - maintain upstream-friendly architecture
 - preserve deterministic behaviour
+
+Important current constraint:
+
+```text
+Do not advance to WiFi telemetry until raw readings are physically stable and repeatable.
+```
 
 ---
 
@@ -34,20 +51,38 @@ Current focus:
 
 Stable repeatable live weight readings from HX711 on ESP32.
 
-## Tasks
+## Current Result
 
-- wire HX711
-- wire load cell
-- connect ESP32
-- verify serial output
-- confirm repeatability
-- verify tare behaviour
+Raw telemetry path confirmed:
+
+```text
+Load cell
+↓
+HX711
+↓
+ESP32
+↓
+serial monitor
+```
+
+The system currently produces live serial data, and pressure applied to the load cell changes the readings.
+
+## Remaining Tasks
+
+- clean temporary load-cell connections
+- reduce loose-wire movement
+- confirm readings remain live after reconnect
+- confirm readings respond consistently to pressure
+- document working pinout
+- begin basic tare/calibration only after wiring is physically stable
 
 ## Success Criteria
 
 ```text
 stable repeatable live weight readings
 ```
+
+Phase 1 is not complete until the physical wiring is stable enough that readings are repeatable without constant hand-adjustment.
 
 ---
 
@@ -56,6 +91,12 @@ stable repeatable live weight readings
 ## Goal
 
 Create usable espresso-grade weight telemetry.
+
+## Entry Requirement
+
+Phase 1 stable wiring must be complete first.
+
+Do not tune calibration while the load-cell wiring is still loose or intermittent.
 
 ## Tasks
 
@@ -81,6 +122,10 @@ approximately ±0.5g practical repeatability.
 ## Goal
 
 Transmit live weight telemetry over WiFi.
+
+## Entry Requirement
+
+Raw serial readings must be stable and repeatable first.
 
 ## Tasks
 
@@ -190,6 +235,35 @@ flow continuation after stop
 ```
 
 because the machine does not use a 3-way solenoid.
+
+---
+
+# Immediate Cleanup Plan
+
+Current installation is valid for proof-of-life, but not stable enough for calibration.
+
+Cleanup target:
+
+```text
+secure temporary wiring without finalising permanent build
+```
+
+Allowed cleanup:
+
+- reseat HX711 firmly in breadboard
+- shorten or organise jumper routes where possible
+- secure load-cell wire joins temporarily
+- avoid strain on HX711 pins
+- keep USB power only
+- keep all wiring visible for inspection
+
+Do not yet:
+
+- solder load-cell wires permanently
+- hide wiring inside enclosure
+- add WiFi logic
+- add GaggiMate integration
+- start auto-stop tuning
 
 ---
 
