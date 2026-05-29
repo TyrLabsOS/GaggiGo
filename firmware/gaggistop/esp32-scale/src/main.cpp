@@ -15,6 +15,9 @@ constexpr uint16_t LOOP_DELAY_MS = 250;
 constexpr uint16_t HX711_READY_TIMEOUT_MS = 3000;
 constexpr long STABLE_SPREAD_RAW = 1500;
 constexpr float FILTER_ALPHA = 0.25f;
+constexpr float FAST_FILTER_ALPHA = 0.65f;
+constexpr float FAST_CHANGE_GRAMS = 1.0f;
+constexpr float ZERO_SNAP_GRAMS = 0.15f;
 constexpr size_t COMMAND_BUFFER_SIZE = 32;
 
 float rawUnitsPerGram = -10000.0f;
@@ -82,7 +85,20 @@ float updateFiltered(float grams) {
         filterReady = true;
         return filteredGrams;
     }
-    filteredGrams += FILTER_ALPHA * (grams - filteredGrams);
+
+    if (abs(grams) <= ZERO_SNAP_GRAMS) {
+        filteredGrams = 0.0f;
+        return filteredGrams;
+    }
+
+    const float delta = abs(grams - filteredGrams);
+    const float alpha = delta >= FAST_CHANGE_GRAMS ? FAST_FILTER_ALPHA : FILTER_ALPHA;
+    filteredGrams += alpha * (grams - filteredGrams);
+
+    if (abs(filteredGrams) <= ZERO_SNAP_GRAMS && abs(grams) <= FAST_CHANGE_GRAMS) {
+        filteredGrams = 0.0f;
+    }
+
     return filteredGrams;
 }
 
