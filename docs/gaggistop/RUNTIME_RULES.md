@@ -17,13 +17,18 @@ GaggiStop
 Project phase:
 
 ```text
-Phase 1 — Hardware bring-up
+PHASE 2 COMPLETE
+CURRENT PHASE: HARDWARE STABILISATION BEFORE WIFI
 ```
 
 Current status:
 
 ```text
-parts received / physical validation starting
+tare validated
+calibration validated
+median filtering validated
+adaptive unload recovery validated
+repeatability demonstrated
 ```
 
 Canonical project folder:
@@ -68,14 +73,16 @@ GaggiGo is visualisation only.
 
 Critical stop logic belongs inside GaggiMate firmware.
 
-GaggiStop must not become:
+Do not add:
 
-- a standalone control authority
-- a smart scale ecosystem
-- a cloud product
-- a Bluetooth product
-- a Home Assistant project
-- a separate consumer app
+- OLED displays
+- batteries
+- Bluetooth scale support
+- cloud systems
+- Home Assistant
+- analytics platforms
+- smart-scale ecosystems
+- separate consumer apps
 
 GaggiGo must not own live machine stop control.
 
@@ -83,23 +90,26 @@ GaggiGo must not own live machine stop control.
 
 ## Current Engineering Target
 
-Work only on Phase 1 until complete.
-
-Phase 1 target:
+Current objective:
 
 ```text
-ESP32 boots
-Serial monitor works
-HX711 produces live readings
-Load cell responds to weight changes
-Readings are repeatable enough to continue
+hardware stabilisation before WiFi
 ```
 
-Do not advance to WiFi telemetry until raw serial weight readings are stable.
+Known weakest component:
 
-Do not advance to GaggiMate integration until WiFi telemetry is proven.
+```text
+temporary jumper wiring between HX711 and ESP32
+```
 
-Do not tune auto-stop until GaggiMate receives live weight reliably.
+Before WiFi work:
+
+- improve or replace temporary jumper wiring
+- add strain relief
+- eliminate intermittent connection risk
+- repeat Phase 2 validation tests
+
+Do not advance to WiFi telemetry until Phase 2 behaviour remains repeatable after wiring cleanup.
 
 ---
 
@@ -114,16 +124,45 @@ Correct order:
 2. serial monitor
 3. HX711 wiring
 4. raw readings
-5. tare/calibration
-6. basic filtering
-7. WiFi telemetry
-8. GaggiMate integration
-9. auto-stop tuning
+5. tare
+6. calibration
+7. median filtering
+8. adaptive unload recovery
+9. repeatability validation
+10. wiring stabilisation
+11. WiFi telemetry
+12. GaggiMate integration
+13. auto-stop tuning
 ```
 
 Never debug multiple layers at once.
 
 If something fails, reduce back to the last known working layer.
+
+---
+
+## Current Validated State
+
+Confirmed:
+
+- ESP32 flashing works
+- PlatformIO environment works
+- serial monitor works
+- HX711 detected successfully
+- load cell produces live readings
+- tare implemented
+- calibration implemented
+- median filtering implemented
+- adaptive filter tuning implemented
+- unload recovery implemented
+- UK 50p validation completed
+- UK 10p validation completed
+- combined coin validation completed
+- practical repeatability achieved
+
+Firmware is no longer the primary concern.
+
+Hardware stability is the current concern.
 
 ---
 
@@ -136,36 +175,30 @@ Before powering hardware:
 - verify HX711 pinout
 - verify load cell wire colours
 - check for loose jumpers
-- avoid late-night angry rewiring
+- inspect strain on temporary connections
 
-No mains-voltage work belongs in GaggiStop Phase 1.
+USB-powered prototype only.
 
-USB-powered low-voltage prototype only.
+No mains-voltage work belongs in GaggiStop.
 
 ---
 
 ## Software Rules
 
-Use PlatformIO for firmware work.
-
-Initial firmware goal is only:
-
-```text
-print boot message
-read HX711
-print readings over serial
-```
-
-Do not add advanced logic before physical readings exist.
+Current firmware scope is complete for this phase.
 
 Do not add:
 
+- WiFi telemetry before wiring validation
+- GaggiMate integration before WiFi validation
+- auto-stop logic before telemetry validation
 - prediction engines
-- adaptive filtering
-- complex protocols
-- UI work
-- cloud/MQTT/Home Assistant integrations
-- battery/power optimisation
+- cloud integrations
+- Home Assistant integrations
+- battery optimisation work
+- ecosystem features
+
+Current goal is to freeze Phase 2 behaviour and verify it survives wiring cleanup.
 
 ---
 
@@ -181,59 +214,62 @@ stop trigger = 31g
 offset = 1.0g
 ```
 
-The offset must remain configurable later.
+The offset remains configurable later.
 
-0.5g may be tested only after the full signal path is proven.
+Critical stop logic belongs inside GaggiMate firmware.
 
 ---
 
 ## Repo Rules
 
-Canonical integration work lives in:
+Canonical project home:
 
 ```text
-TyrLabsOS/GaggiGo branch GaggiStop
+TyrLabsOS/GaggiGo
+branch: GaggiStop
 ```
 
-The old standalone GaggiStop repo is no longer the canonical project home.
-
-Do not create more repos for this project.
-
-Do not copy unrelated experimental clutter into this branch.
+Do not create additional repos.
 
 Keep commits small and upstream-friendly.
+
+Before proposing architecture changes:
+
+- check README.md
+- check ROADMAP.md
+- check HARDWARE_VALIDATION.md
+- check RUNTIME_RULES.md
+- check current firmware state
 
 ---
 
 ## Decision Rule
 
-Before any new feature is proposed, ask:
+Before any new feature is proposed ask:
 
 ```text
-Does this help Phase 1 physical validation?
+Does this help hardware stabilisation before WiFi?
 ```
 
-If no, defer it.
+If no:
 
-Before any architecture change is proposed, check:
-
-- README.md
-- ROADMAP.md
-- this runtime rules file
-- current GitHub branch state
+```text
+defer it
+```
 
 ---
 
 ## Current Hard Stop
 
-Until Phase 1 succeeds, the only valid engineering work is:
+Until wiring stabilisation is complete, the only valid engineering work is:
 
 ```text
-ESP32 boot
-serial output
-HX711 wiring
-raw readings
-basic calibration
+improve jumper wiring
+add strain relief
+repeat 50p validation
+repeat 10p validation
+repeat unload validation
+confirm repeatability remains stable
 ```
 
 Everything else is later.
