@@ -1,6 +1,4 @@
 #include <Arduino.h>
-#include <WiFi.h>
-#include <WebSocketsServer.h>
 #include "HX711.h"
 
 #define HX711_DOUT 4
@@ -9,7 +7,6 @@
 namespace {
 
 HX711 scale;
-WebSocketsServer webSocket(81);
 
 constexpr uint8_t READ_SAMPLES = 10;
 constexpr uint8_t TARE_SAMPLES = 25;
@@ -18,10 +15,7 @@ constexpr uint16_t LOOP_DELAY_MS = 250;
 constexpr uint16_t HX711_READY_TIMEOUT_MS = 3000;
 constexpr long STABLE_SPREAD_RAW = 1500;
 constexpr float FILTER_ALPHA = 0.25f;
-constexpr float MAX_VALID_GRAMS = 2000.0f;
 constexpr size_t COMMAND_BUFFER_SIZE = 32;
-constexpr char WIFI_AP_SSID[] = "GaggiStop-Scale";
-constexpr char WIFI_AP_PASSWORD[] = "gaggistop";
 
 float rawUnitsPerGram = -10000.0f;
 long tareOffset = 0;
@@ -30,7 +24,6 @@ char commandBuffer[COMMAND_BUFFER_SIZE] = {0};
 size_t commandIndex = 0;
 float filteredGrams = 0.0f;
 bool filterReady = false;
-uint32_t packetSeq = 0;
 
 bool waitForHx711Ready(uint16_t timeoutMs = HX711_READY_TIMEOUT_MS) {
     const unsigned long start = millis();
@@ -59,7 +52,9 @@ void sortValues(long* values, uint8_t count) {
 
 long readMedian() {
     long values[MEDIAN_SAMPLES] = {0};
-    for (uint8_t i = 0; i < MEDIAN_SAMPLES; i++) values[i] = scale.read();
+    for (uint8_t i = 0; i < MEDIAN_SAMPLES; i++) {
+        values[i] = scale.read();
+    }
     sortValues(values, MEDIAN_SAMPLES);
     return values[MEDIAN_SAMPLES / 2];
 }
@@ -81,57 +76,33 @@ float rawToGrams(long rawReading) {
     return static_cast<float>(rawReading - tareOffset) / rawUnitsPerGram;
 }
 
+float updateFiltered(float grams) {
+    if (!filterReady) {
+        filteredGrams = grams;
+        filterReady = true;
+        return filteredGrams;
+    }
+    filteredGrams += FILTER_ALPHA * (grams - filteredGrams);
+    return filteredGrams;
+}
+
 void resetFilter(float grams) {
     filteredGrams = grams;
     filterReady = true;
 }
 
-float updateFiltered(float grams, bool accept) {
-    if (!accept) return filteredGrams;
-
-    if (!filterReady) {
-        resetFilter(grams);
-        return filteredGrams;
-    }
-
-    filteredGrams += FILTER_ALPHA * (grams - filteredGrams);
-    return filteredGrams;
-}
-
-void sendTelemetry(float grams, long rawMedian, long spread, bool stable, bool accepted) {
-    String payload = "{";
-    payload += "\"type\":\"gaggistop_weight\",";
-    payload += "\"seq\":" + String(packetSeq++) + ",";
-    payload += "\"ms\":" + String(millis()) + ",";
-    payload += "\"weight_g\":" + String(grams, 2) + ",";
-    payload += "\"raw\":" + String(rawMedian) + ",";
-    payload += "\"spread\":" + String(spread) + ",";
-    payload += "\"stable\":" + String(stable ? "true" : "false") + ",";
-    payload += "\"accepted\":" + String(accepted ? "true" : "false") + ",";
-    payload += "\"tare\":" + String(tareValid ? "true" : "false");
-    payload += "}";
-
-    Serial.println(payload);
-
-    if (accepted) {
-        webSocket.broadcastTXT(payload);
-    }
-}
-
 void printHelp() {
     Serial.println();
-    Serial.println("GaggiStop Phase 3A WiFi telemetry firmware");
+    Serial.println("GaggiStop Phase 2 filtered diagnostic firmware");
     Serial.println("Commands:");
     Serial.println("  h       help");
     Serial.println("  t       tare empty platform");
     Serial.println("  c 8.0   calibrate using known weight in grams");
     Serial.println();
-    Serial.println("WiFi AP:");
-    Serial.print("  SSID: ");
-    Serial.println(WIFI_AP_SSID);
-    Serial.print("  PASS: ");
-    Serial.println(WIFI_AP_PASSWORD);
-    Serial.println("  WS:   ws://192.168.4.1:81/");
+    Serial.println("Known test weights:");
+    Serial.println("  UK 10p = 6.5g");
+    Serial.println("  UK 50p = 8.0g");
+    Serial.println("  both   = 14.5g");
     Serial.println();
 }
 
@@ -198,7 +169,9 @@ void calibrate(float knownWeightGrams) {
     Serial.print("Calibration factor raw units/g: ");
     Serial.println(rawUnitsPerGram, 4);
 
-    if (abs(deltaRaw) < 1000) Serial.println("Warning: raw delta is very small. Check mechanics and wiring.");
+    if (abs(deltaRaw) < 1000) {
+        Serial.println("Warning: raw delta is very small. Check load cell mechanics and wiring.");
+    }
 }
 
 void processCommand(const char* command) {
@@ -259,32 +232,44 @@ void handleSerialCommand() {
     }
 }
 
-void readAndSendWeight() {
+void printReading() {
     if (!scale.is_ready()) {
-        Serial.println("{\"type\":\"gaggistop_status\",\"hx711\":\"not_ready\"}");
+        Serial.println("HX711 not ready");
         return;
     }
 
+    const long rawAverage = readAverage(READ_SAMPLES);
     const long rawMedian = readMedian();
+    const long rawDelta = rawAverage - tareOffset;
+    const long medianDelta = rawMedian - tareOffset;
     const long spread = readSpread(READ_SAMPLES);
+    const float gramsRaw = rawToGrams(rawAverage);
     const float gramsMedian = rawToGrams(rawMedian);
+    const float gramsFiltered = updateFiltered(gramsMedian);
     const bool stable = spread <= STABLE_SPREAD_RAW;
-    const bool plausible = abs(gramsMedian) <= MAX_VALID_GRAMS;
-    const bool accepted = tareValid && stable && plausible;
-    const float gramsFiltered = updateFiltered(gramsMedian, accepted);
 
-    sendTelemetry(gramsFiltered, rawMedian, spread, stable, accepted);
-}
-
-void startWifiTelemetry() {
-    WiFi.mode(WIFI_AP);
-    WiFi.softAP(WIFI_AP_SSID, WIFI_AP_PASSWORD);
-    webSocket.begin();
-
-    Serial.println("WiFi telemetry AP started");
-    Serial.print("AP IP: ");
-    Serial.println(WiFi.softAPIP());
-    Serial.println("WebSocket: ws://192.168.4.1:81/");
+    Serial.print("raw_avg=");
+    Serial.print(rawAverage);
+    Serial.print(" raw_med=");
+    Serial.print(rawMedian);
+    Serial.print(" raw_delta=");
+    Serial.print(rawDelta);
+    Serial.print(" med_delta=");
+    Serial.print(medianDelta);
+    Serial.print(" g_raw=");
+    Serial.print(gramsRaw, 2);
+    Serial.print(" g_med=");
+    Serial.print(gramsMedian, 2);
+    Serial.print(" g_filt=");
+    Serial.print(gramsFiltered, 2);
+    Serial.print(" spread=");
+    Serial.print(spread);
+    Serial.print(" stable=");
+    Serial.print(stable ? "yes" : "no");
+    Serial.print(" tare=");
+    Serial.print(tareValid ? "yes" : "no");
+    Serial.print(" cal=");
+    Serial.println(rawUnitsPerGram, 2);
 }
 
 }  // namespace
@@ -294,19 +279,17 @@ void setup() {
 
     delay(500);
     Serial.println();
-    Serial.println("GaggiStop HX711 Phase 3A");
+    Serial.println("GaggiStop HX711 Phase 2");
 
     scale.begin(HX711_DOUT, HX711_SCK);
-    Serial.println("HX711 started");
 
-    startWifiTelemetry();
+    Serial.println("HX711 started");
     printHelp();
     tareScale();
 }
 
 void loop() {
-    webSocket.loop();
     handleSerialCommand();
-    readAndSendWeight();
+    printReading();
     delay(LOOP_DELAY_MS);
 }
