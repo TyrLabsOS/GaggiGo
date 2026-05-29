@@ -111,7 +111,7 @@ Approximate total cost:
 Current status:
 
 ```text
-PHASE 1 RAW TELEMETRY VALIDATED
+PHASE 2 CALIBRATION & FILTERING VALIDATED
 ```
 
 Current confirmed working chain:
@@ -123,6 +123,14 @@ HX711
 ↓
 ESP32
 ↓
+tare
+↓
+calibration
+↓
+median filtering
+↓
+adaptive filtered grams output
+↓
 serial telemetry
 ```
 
@@ -133,14 +141,35 @@ Confirmed:
 - serial monitor works
 - HX711 detected successfully
 - load cell produces live changing readings
-- pressure changes produce stable telemetry deltas
+- pressure and known weights produce stable telemetry deltas
+- tare works
+- calibration works using a UK 50p coin as an 8.0g reference
+- median filtering works
+- filtered output returns to zero quickly after unload
+- practical repeatability target is achievable
 - mechanical mounting is viable
 - espresso-scale sensitivity appears achievable
+
+Validated test references:
+
+```text
+UK 50p = 8.0g
+UK 10p = 6.5g
+50p + 10p = 14.5g
+```
+
+Observed behaviour after filter tuning:
+
+```text
+50p fitted  → filtered output approx 8.0g
+50p removed → filtered output snaps back to 0.00g when near zero
+empty scale  → filtered output remains near 0.00g
+```
 
 Current known reality:
 
 ```text
-mechanical assembly quality matters more than electronics complexity
+mechanical assembly and wiring quality affect readings more than electronics complexity
 ```
 
 The largest improvements in telemetry stability came from:
@@ -149,8 +178,18 @@ The largest improvements in telemetry stability came from:
 - reducing mechanical binding
 - improving load-cell flex behaviour
 - stabilising the mounting geometry
+- improving temporary wire strain relief
+- tuning filter behaviour for fast unload / zero recovery
 
-Detailed validated wiring and hardware findings now live in:
+Current weakest point:
+
+```text
+temporary jumper wiring
+```
+
+The firmware and scale path are now good enough to justify permanent wiring cleanup before WiFi telemetry work.
+
+Detailed validated wiring and hardware findings live in:
 
 ```text
 docs/gaggistop/HARDWARE_VALIDATION.md
@@ -162,20 +201,19 @@ docs/gaggistop/HARDWARE_VALIDATION.md
 
 Current focus:
 
-- improve temporary wire reliability
-- stabilise prototype mounting
-- add tare support
-- add averaging/filtering
-- convert raw HX711 counts into grams
-- validate repeatability using known weights
+- secure or solder permanent wiring
+- add strain relief
+- remove temporary jumper instability
+- repeat empty / 50p / unload validation after wiring cleanup
+- freeze Phase 2 firmware behaviour before WiFi
 
 Do NOT yet:
 
-- add WiFi telemetry
+- add WiFi telemetry before wiring cleanup validation
 - integrate GaggiMate control logic
 - optimise enclosure aesthetics
 - implement brew auto-stop
-- chase perfect metrology
+- chase perfect laboratory metrology
 
 Current objective remains:
 
