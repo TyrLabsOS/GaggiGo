@@ -12,12 +12,15 @@ constexpr uint8_t READ_SAMPLES = 10;
 constexpr uint8_t TARE_SAMPLES = 25;
 constexpr uint16_t LOOP_DELAY_MS = 500;
 constexpr long STABLE_SPREAD_RAW = 1500;
+constexpr size_t COMMAND_BUFFER_SIZE = 32;
 
 // Temporary Phase 2 starting point.
 // If weight reads negative when loaded, this value should remain negative.
 // Use serial command "c 8.0" with an 8g 50p coin fitted to calculate a better value.
 float rawUnitsPerGram = -10000.0f;
 long tareOffset = 0;
+char commandBuffer[COMMAND_BUFFER_SIZE] = {0};
+size_t commandIndex = 0;
 
 long readAverage(uint8_t samples) {
     return scale.read_average(samples);
@@ -108,37 +111,70 @@ void calibrate(float knownWeightGrams) {
     }
 }
 
-void handleSerialCommand() {
-    if (!Serial.available()) {
+void processCommand(const char* command) {
+    String line(command);
+    line.trim();
+    line.toLowerCase();
+
+    if (line.length() == 0) {
         return;
     }
 
-    const String command = Serial.readStringUntil('\n');
-    const String trimmed = command.substring(0, command.length());
+    Serial.print("Command received: ");
+    Serial.println(line);
 
-    if (trimmed.length() == 0) {
-        return;
-    }
-
-    const char action = tolower(trimmed.charAt(0));
-
-    if (action == 'h') {
+    if (line == "h" || line == "help") {
         printHelp();
         return;
     }
 
-    if (action == 't') {
+    if (line == "t" || line == "tare") {
         tareScale();
         return;
     }
 
-    if (action == 'c') {
-        const float knownWeight = trimmed.substring(1).toFloat();
+    if (line.startsWith("c") || line.startsWith("cal")) {
+        line.replace("cal", "c");
+        line.remove(0, 1);
+        line.trim();
+
+        const float knownWeight = line.toFloat();
         calibrate(knownWeight);
         return;
     }
 
-    Serial.println("Unknown command. Type h for help.");
+    Serial.println("Unknown command. Use h, t, or c 8.0");
+}
+
+void flushCommandBuffer() {
+    commandBuffer[commandIndex] = '\0';
+    processCommand(commandBuffer);
+    commandIndex = 0;
+    commandBuffer[0] = '\0';
+}
+
+void handleSerialCommand() {
+    while (Serial.available() > 0) {
+        const char incoming = static_cast<char>(Serial.read());
+
+        if (incoming == '\r' || incoming == '\n') {
+            if (commandIndex > 0) {
+                flushCommandBuffer();
+            }
+            continue;
+        }
+
+        if (!isPrintable(incoming)) {
+            continue;
+        }
+
+        if (commandIndex < COMMAND_BUFFER_SIZE - 1) {
+            commandBuffer[commandIndex++] = incoming;
+            commandBuffer[commandIndex] = '\0';
+        } else {
+            flushCommandBuffer();
+        }
+    }
 }
 
 void printReading() {
@@ -171,7 +207,6 @@ void printReading() {
 
 void setup() {
     Serial.begin(115200);
-    Serial.setTimeout(100);
 
     delay(500);
     Serial.println();
