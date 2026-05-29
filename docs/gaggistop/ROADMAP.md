@@ -5,7 +5,8 @@
 Project status:
 
 ```text
-PHASE 1 RAW TELEMETRY PROOF ACHIEVED
+PHASE 2 CALIBRATION & FILTERING VALIDATED
+CURRENT PHASE: HARDWARE STABILISATION BEFORE WIFI
 ```
 
 Current completed work:
@@ -19,20 +20,28 @@ Current completed work:
 - PlatformIO environment prepared
 - upstream integration strategy established
 - ESP32 powered successfully
-- ESP32 detected on COM3
 - firmware built successfully
 - firmware uploaded successfully
 - serial monitor confirmed working
 - HX711 headers soldered
 - HX711 connected to ESP32
 - load cell connected to HX711
-- raw HX711 data confirmed scrolling in serial monitor
+- raw HX711 data confirmed in serial monitor
 - load cell pressure confirmed to change readings
+- tare implemented and validated
+- calibration implemented and validated
+- median filtering implemented
+- adaptive filter tuning implemented
+- rapid unload / near-zero recovery implemented
+- UK 50p, UK 10p, and combined coin tests performed
+- practical espresso-scale repeatability demonstrated
 
 Current focus:
 
-- clean up temporary hardware wiring
-- improve connection reliability
+- replace or improve temporary jumper wiring
+- add strain relief
+- remove intermittent connection risk
+- repeat empty / 50p / unload validation after wiring cleanup
 - keep setup low-voltage and USB-powered
 - maintain upstream-friendly architecture
 - preserve deterministic behaviour
@@ -40,18 +49,24 @@ Current focus:
 Important current constraint:
 
 ```text
-Do not advance to WiFi telemetry until raw readings are physically stable and repeatable.
+Do not advance to WiFi telemetry until the physical wiring has been stabilised and Phase 2 validation is repeatable after that cleanup.
 ```
 
 ---
 
 # Phase 1 — Hardware Bring-Up
 
+## Status
+
+```text
+COMPLETE
+```
+
 ## Goal
 
 Stable repeatable live weight readings from HX711 on ESP32.
 
-## Current Result
+## Result
 
 Raw telemetry path confirmed:
 
@@ -65,16 +80,18 @@ ESP32
 serial monitor
 ```
 
-The system currently produces live serial data, and pressure applied to the load cell changes the readings.
+The system produces live serial data, and pressure applied to the load cell changes the readings.
 
-## Remaining Tasks
+## Completed Tasks
 
-- clean temporary load-cell connections
-- reduce loose-wire movement
-- confirm readings remain live after reconnect
-- confirm readings respond consistently to pressure
-- document working pinout
-- begin basic tare/calibration only after wiring is physically stable
+- ESP32 powered successfully
+- PlatformIO build/upload works
+- serial monitor works
+- HX711 detected
+- load cell connected
+- raw readings confirmed
+- pressure/load response confirmed
+- working pinout documented
 
 ## Success Criteria
 
@@ -82,29 +99,71 @@ The system currently produces live serial data, and pressure applied to the load
 stable repeatable live weight readings
 ```
 
-Phase 1 is not complete until the physical wiring is stable enough that readings are repeatable without constant hand-adjustment.
+Phase 1 is complete.
 
 ---
 
 # Phase 2 — Calibration & Filtering
 
+## Status
+
+```text
+COMPLETE / VALIDATED FOR PROTOTYPE
+```
+
 ## Goal
 
 Create usable espresso-grade weight telemetry.
 
-## Entry Requirement
+## Result
 
-Phase 1 stable wiring must be complete first.
+Confirmed working chain:
 
-Do not tune calibration while the load-cell wiring is still loose or intermittent.
+```text
+Load cell
+↓
+HX711
+↓
+ESP32
+↓
+tare
+↓
+calibration
+↓
+median filtering
+↓
+adaptive filtered grams output
+↓
+serial telemetry
+```
 
-## Tasks
+## Completed Tasks
 
-- calibration factor
-- tare refinement
-- vibration testing
-- smoothing/filtering
-- latency observation
+- tare support
+- calibration factor calculation
+- raw-to-grams conversion
+- median filtering
+- filtered grams output
+- fast response for large weight changes
+- near-zero snap-back for unload behaviour
+- repeatability testing using UK coins
+- return-to-zero behaviour improved
+
+## Validated Test Weights
+
+```text
+UK 50p = 8.0g
+UK 10p = 6.5g
+50p + 10p = 14.5g
+```
+
+Observed after filter tuning:
+
+```text
+50p fitted  → filtered output approx 8.0g
+50p removed → filtered output returns to 0.00g quickly
+empty scale  → filtered output remains near 0.00g
+```
 
 ## Success Criteria
 
@@ -115,9 +174,63 @@ repeatable espresso-grade readings
 Target:
 approximately ±0.5g practical repeatability.
 
+Prototype result:
+
+```text
+PASS — good enough to proceed after hardware wiring stabilisation.
+```
+
+## Remaining Limitation
+
+Temporary wiring is still a known instability source.
+
+Large occasional spikes are likely caused by jumper/breadboard/interconnect disturbance rather than firmware logic.
+
 ---
 
-# Phase 3 — WiFi Telemetry
+# Phase 3 — Hardware Stabilisation
+
+## Status
+
+```text
+CURRENT PHASE
+```
+
+## Goal
+
+Turn the temporary proof-of-life build into a physically reliable telemetry prototype before adding WiFi.
+
+## Tasks
+
+- secure or replace temporary jumper wires
+- solder permanent connections where sensible
+- avoid unnecessary temporary splice chains
+- strain-relieve HX711 and ESP32 wiring
+- keep low-voltage wiring away from movement/load paths
+- ensure no wire touches or loads the platform/load-cell flex path
+- repeat empty stability test
+- repeat 50p calibration test
+- repeat 50p unload / return-to-zero test
+
+## Success Criteria
+
+```text
+Phase 2 behaviour remains repeatable after wiring cleanup.
+```
+
+Expected post-cleanup checks:
+
+```text
+empty       → stable near 0.00g
+50p fitted  → stable near 8.0g
+50p removed → fast return to 0.00g
+```
+
+Do not add WiFi until this is confirmed.
+
+---
+
+# Phase 4 — WiFi Telemetry
 
 ## Goal
 
@@ -125,7 +238,7 @@ Transmit live weight telemetry over WiFi.
 
 ## Entry Requirement
 
-Raw serial readings must be stable and repeatable first.
+Physical wiring must be stable and repeatable after Phase 3 cleanup.
 
 ## Tasks
 
@@ -134,6 +247,7 @@ Raw serial readings must be stable and repeatable first.
 - packet structure
 - reconnect handling
 - telemetry validation
+- latency observation
 
 Current preferred packet philosophy:
 
@@ -157,7 +271,7 @@ stable low-latency telemetry stream
 
 ---
 
-# Phase 4 — GaggiMate Integration
+# Phase 5 — GaggiMate Integration
 
 ## Goal
 
@@ -198,7 +312,7 @@ GaggiMate displays live weight telemetry
 
 ---
 
-# Phase 5 — Auto-Stop Tuning
+# Phase 6 — Auto-Stop Tuning
 
 ## Goal
 
@@ -240,28 +354,28 @@ because the machine does not use a 3-way solenoid.
 
 # Immediate Cleanup Plan
 
-Current installation is valid for proof-of-life, but not stable enough for calibration.
+Current installation is valid for proof-of-life and Phase 2 firmware validation, but temporary wiring is still the weakest link.
 
 Cleanup target:
 
 ```text
-secure temporary wiring without finalising permanent build
+secure physical interconnects before WiFi
 ```
 
 Allowed cleanup:
 
-- reseat HX711 firmly in breadboard
+- secure HX711 and ESP32 jumper routes
+- solder permanent connections where sensible
+- add strain relief
 - shorten or organise jumper routes where possible
-- secure load-cell wire joins temporarily
 - avoid strain on HX711 pins
 - keep USB power only
-- keep all wiring visible for inspection
+- keep all wiring visible for inspection until stable
 
 Do not yet:
 
-- solder load-cell wires permanently
 - hide wiring inside enclosure
-- add WiFi logic
+- add WiFi logic before repeat validation
 - add GaggiMate integration
 - start auto-stop tuning
 
