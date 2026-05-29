@@ -11,6 +11,7 @@ HX711 scale;
 constexpr uint8_t READ_SAMPLES = 10;
 constexpr uint8_t TARE_SAMPLES = 25;
 constexpr uint16_t LOOP_DELAY_MS = 500;
+constexpr uint16_t HX711_READY_TIMEOUT_MS = 3000;
 constexpr long STABLE_SPREAD_RAW = 1500;
 constexpr size_t COMMAND_BUFFER_SIZE = 32;
 
@@ -19,8 +20,22 @@ constexpr size_t COMMAND_BUFFER_SIZE = 32;
 // Use serial command "c 8.0" with an 8g 50p coin fitted to calculate a better value.
 float rawUnitsPerGram = -10000.0f;
 long tareOffset = 0;
+bool tareValid = false;
 char commandBuffer[COMMAND_BUFFER_SIZE] = {0};
 size_t commandIndex = 0;
+
+bool waitForHx711Ready(uint16_t timeoutMs = HX711_READY_TIMEOUT_MS) {
+    const unsigned long start = millis();
+
+    while (!scale.is_ready()) {
+        if (millis() - start >= timeoutMs) {
+            return false;
+        }
+        delay(10);
+    }
+
+    return true;
+}
 
 long readAverage(uint8_t samples) {
     return scale.read_average(samples);
@@ -65,15 +80,24 @@ void printHelp() {
 }
 
 void tareScale() {
-    if (!scale.is_ready()) {
-        Serial.println("Tare failed: HX711 not ready");
+    Serial.println("Taring. Keep platform empty and still...");
+
+    if (!waitForHx711Ready()) {
+        tareValid = false;
+        Serial.println("Tare failed: HX711 not ready after timeout");
         return;
     }
 
-    Serial.println("Taring. Keep platform empty and still...");
     delay(1000);
 
+    if (!waitForHx711Ready()) {
+        tareValid = false;
+        Serial.println("Tare failed: HX711 not ready before read");
+        return;
+    }
+
     tareOffset = readAverage(TARE_SAMPLES);
+    tareValid = true;
 
     Serial.print("Tare offset: ");
     Serial.println(tareOffset);
@@ -85,8 +109,13 @@ void calibrate(float knownWeightGrams) {
         return;
     }
 
-    if (!scale.is_ready()) {
-        Serial.println("Calibration failed: HX711 not ready");
+    if (!tareValid) {
+        Serial.println("Calibration failed: tare first with empty platform using command: t");
+        return;
+    }
+
+    if (!waitForHx711Ready()) {
+        Serial.println("Calibration failed: HX711 not ready after timeout");
         return;
     }
 
@@ -94,6 +123,11 @@ void calibrate(float knownWeightGrams) {
     Serial.print(knownWeightGrams, 2);
     Serial.println("g. Keep weight fitted and still...");
     delay(1000);
+
+    if (!waitForHx711Ready()) {
+        Serial.println("Calibration failed: HX711 not ready before read");
+        return;
+    }
 
     const long loadedRaw = readAverage(TARE_SAMPLES);
     const long deltaRaw = loadedRaw - tareOffset;
@@ -199,6 +233,8 @@ void printReading() {
     Serial.print(spread);
     Serial.print(" stable=");
     Serial.print(stable ? "yes" : "no");
+    Serial.print(" tare=");
+    Serial.print(tareValid ? "yes" : "no");
     Serial.print(" cal=");
     Serial.println(rawUnitsPerGram, 2);
 }
