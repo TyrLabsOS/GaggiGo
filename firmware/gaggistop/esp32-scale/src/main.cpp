@@ -10,35 +10,53 @@ HX711 scale;
 
 constexpr uint8_t READ_SAMPLES = 10;
 constexpr uint8_t TARE_SAMPLES = 25;
-constexpr uint16_t LOOP_DELAY_MS = 500;
+constexpr uint8_t MEDIAN_SAMPLES = 9;
+constexpr uint16_t LOOP_DELAY_MS = 250;
 constexpr uint16_t HX711_READY_TIMEOUT_MS = 3000;
 constexpr long STABLE_SPREAD_RAW = 1500;
+constexpr float FILTER_ALPHA = 0.25f;
 constexpr size_t COMMAND_BUFFER_SIZE = 32;
 
-// Temporary Phase 2 starting point.
-// If weight reads negative when loaded, this value should remain negative.
-// Use serial command "c 8.0" with an 8g 50p coin fitted to calculate a better value.
 float rawUnitsPerGram = -10000.0f;
 long tareOffset = 0;
 bool tareValid = false;
 char commandBuffer[COMMAND_BUFFER_SIZE] = {0};
 size_t commandIndex = 0;
+float filteredGrams = 0.0f;
+bool filterReady = false;
 
 bool waitForHx711Ready(uint16_t timeoutMs = HX711_READY_TIMEOUT_MS) {
     const unsigned long start = millis();
-
     while (!scale.is_ready()) {
-        if (millis() - start >= timeoutMs) {
-            return false;
-        }
+        if (millis() - start >= timeoutMs) return false;
         delay(10);
     }
-
     return true;
 }
 
 long readAverage(uint8_t samples) {
     return scale.read_average(samples);
+}
+
+void sortValues(long* values, uint8_t count) {
+    for (uint8_t i = 1; i < count; i++) {
+        long key = values[i];
+        int8_t j = i - 1;
+        while (j >= 0 && values[j] > key) {
+            values[j + 1] = values[j];
+            j--;
+        }
+        values[j + 1] = key;
+    }
+}
+
+long readMedian() {
+    long values[MEDIAN_SAMPLES] = {0};
+    for (uint8_t i = 0; i < MEDIAN_SAMPLES; i++) {
+        values[i] = scale.read();
+    }
+    sortValues(values, MEDIAN_SAMPLES);
+    return values[MEDIAN_SAMPLES / 2];
 }
 
 long readSpread(uint8_t samples) {
@@ -47,14 +65,8 @@ long readSpread(uint8_t samples) {
 
     for (uint8_t i = 0; i < samples; i++) {
         const long reading = scale.read();
-
-        if (i == 0 || reading < minReading) {
-            minReading = reading;
-        }
-
-        if (i == 0 || reading > maxReading) {
-            maxReading = reading;
-        }
+        if (i == 0 || reading < minReading) minReading = reading;
+        if (i == 0 || reading > maxReading) maxReading = reading;
     }
 
     return maxReading - minReading;
@@ -64,9 +76,24 @@ float rawToGrams(long rawReading) {
     return static_cast<float>(rawReading - tareOffset) / rawUnitsPerGram;
 }
 
+float updateFiltered(float grams) {
+    if (!filterReady) {
+        filteredGrams = grams;
+        filterReady = true;
+        return filteredGrams;
+    }
+    filteredGrams += FILTER_ALPHA * (grams - filteredGrams);
+    return filteredGrams;
+}
+
+void resetFilter(float grams) {
+    filteredGrams = grams;
+    filterReady = true;
+}
+
 void printHelp() {
     Serial.println();
-    Serial.println("GaggiStop Phase 2 diagnostic firmware");
+    Serial.println("GaggiStop Phase 2 filtered diagnostic firmware");
     Serial.println("Commands:");
     Serial.println("  h       help");
     Serial.println("  t       tare empty platform");
@@ -98,6 +125,7 @@ void tareScale() {
 
     tareOffset = readAverage(TARE_SAMPLES);
     tareValid = true;
+    resetFilter(0.0f);
 
     Serial.print("Tare offset: ");
     Serial.println(tareOffset);
@@ -132,6 +160,7 @@ void calibrate(float knownWeightGrams) {
     const long loadedRaw = readAverage(TARE_SAMPLES);
     const long deltaRaw = loadedRaw - tareOffset;
     rawUnitsPerGram = static_cast<float>(deltaRaw) / knownWeightGrams;
+    resetFilter(knownWeightGrams);
 
     Serial.print("Loaded raw: ");
     Serial.println(loadedRaw);
@@ -150,9 +179,7 @@ void processCommand(const char* command) {
     line.trim();
     line.toLowerCase();
 
-    if (line.length() == 0) {
-        return;
-    }
+    if (line.length() == 0) return;
 
     Serial.print("Command received: ");
     Serial.println(line);
@@ -171,9 +198,7 @@ void processCommand(const char* command) {
         line.replace("cal", "c");
         line.remove(0, 1);
         line.trim();
-
-        const float knownWeight = line.toFloat();
-        calibrate(knownWeight);
+        calibrate(line.toFloat());
         return;
     }
 
@@ -192,15 +217,11 @@ void handleSerialCommand() {
         const char incoming = static_cast<char>(Serial.read());
 
         if (incoming == '\r' || incoming == '\n') {
-            if (commandIndex > 0) {
-                flushCommandBuffer();
-            }
+            if (commandIndex > 0) flushCommandBuffer();
             continue;
         }
 
-        if (!isPrintable(incoming)) {
-            continue;
-        }
+        if (!isPrintable(incoming)) continue;
 
         if (commandIndex < COMMAND_BUFFER_SIZE - 1) {
             commandBuffer[commandIndex++] = incoming;
@@ -218,17 +239,29 @@ void printReading() {
     }
 
     const long rawAverage = readAverage(READ_SAMPLES);
+    const long rawMedian = readMedian();
     const long rawDelta = rawAverage - tareOffset;
+    const long medianDelta = rawMedian - tareOffset;
     const long spread = readSpread(READ_SAMPLES);
-    const float grams = rawToGrams(rawAverage);
+    const float gramsRaw = rawToGrams(rawAverage);
+    const float gramsMedian = rawToGrams(rawMedian);
+    const float gramsFiltered = updateFiltered(gramsMedian);
     const bool stable = spread <= STABLE_SPREAD_RAW;
 
     Serial.print("raw_avg=");
     Serial.print(rawAverage);
+    Serial.print(" raw_med=");
+    Serial.print(rawMedian);
     Serial.print(" raw_delta=");
     Serial.print(rawDelta);
-    Serial.print(" grams=");
-    Serial.print(grams, 2);
+    Serial.print(" med_delta=");
+    Serial.print(medianDelta);
+    Serial.print(" g_raw=");
+    Serial.print(gramsRaw, 2);
+    Serial.print(" g_med=");
+    Serial.print(gramsMedian, 2);
+    Serial.print(" g_filt=");
+    Serial.print(gramsFiltered, 2);
     Serial.print(" spread=");
     Serial.print(spread);
     Serial.print(" stable=");
